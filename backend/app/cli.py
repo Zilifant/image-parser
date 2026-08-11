@@ -14,6 +14,7 @@ from pathlib import Path
 import cv2
 
 from . import config, profiles
+from .store import unique_path
 from .cv.matte import clean_page, export_region, rasterize_polygon
 from .cv.pipeline import detect_regions
 from .cv.qc import check_export
@@ -84,10 +85,11 @@ def main(argv: list[str] | None = None) -> None:
             issues = check_export(rgba, export_options)
             if issues:
                 flagged += 1
-            target = out_dir / f"{path.stem}_{region['label']}.png"
+            target = unique_path(out_dir, f"{path.stem}_{region['label']}", ".png")
             cv2.imwrite(str(target), rgba)
         if args.clean_page:
-            cv2.imwrite(str(out_dir / f"{path.stem}_clean.png"), clean_page(bgr, export_options))
+            target = unique_path(out_dir, f"{path.stem}_clean", ".png")
+            cv2.imwrite(str(target), clean_page(bgr, export_options))
         total_regions += len(regions)
         total_flagged += flagged
         print(f"{path.name}: {len(regions)} elements" + (f" ({flagged} with QC issues)" if flagged else ""))

@@ -191,7 +191,10 @@ def export_all(project_id: str, body: BatchExportRequest):
                     continue
                 path = _export_one(project_id, page_id, page, bgr, region, options)
                 if out_dir is not None:
-                    target = out_dir / f"{_safe_name(page['name'])}_{_safe_name(region['label'])}.png"
+                    # Never overwrite anything in the user's chosen folder.
+                    target = store.unique_path(
+                        out_dir, f"{_safe_name(page['name'])}_{_safe_name(region['label'])}", ".png"
+                    )
                     target.write_bytes(path.read_bytes())
             store.save_page(project_id, page)
             job.tick()
