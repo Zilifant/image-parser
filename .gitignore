@@ -1,3 +1,13 @@
+# image-parser: local project data and ML checkpoints
+data/
+backend/models/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
 # Logs
 logs
 *.log

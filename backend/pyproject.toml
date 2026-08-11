@@ -1,0 +1,38 @@
+[project]
+name = "image-parser-backend"
+version = "0.1.0"
+description = "Backend for the image-parser app: detects graphic elements in scanned pages and exports them as transparent PNGs."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "opencv-python-headless>=4.9",
+    "numpy>=1.26",
+    "pillow>=10.3",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+sam = [
+    "torch>=2.2",
+    "mobile-sam @ git+https://github.com/ChaoningZhang/MobileSAM.git",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
