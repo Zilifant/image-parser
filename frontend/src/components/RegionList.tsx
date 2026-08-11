@@ -6,10 +6,12 @@ import { useEditorStore } from '../state/editorStore'
 export default function RegionList({
   regions,
   onToggleEnabled,
+  onSetAllEnabled,
   onRename,
 }: {
   regions: Region[]
   onToggleEnabled: (region: Region) => void
+  onSetAllEnabled: (enabled: boolean) => void
   onRename: (region: Region, label: string) => void
 }) {
   const selectedIds = useEditorStore((state) => state.selectedIds)
@@ -25,12 +27,23 @@ export default function RegionList({
   if (sort === 'flagged') sorted.sort((a, b) => Number(b.status === 'flagged') - Number(a.status === 'flagged'))
 
   const flaggedCount = regions.filter((region) => region.status === 'flagged').length
+  const enabledCount = regions.filter((region) => region.enabled).length
+  const allEnabled = regions.length > 0 && enabledCount === regions.length
 
   return (
-    <section style={{ flex: 1 }}>
+    <section className="regions-section">
       <div className="row" style={{ marginBottom: 6 }}>
+        <input
+          type="checkbox"
+          title={allEnabled ? 'Deselect all (exclude everything from export)' : 'Select all (include everything in export)'}
+          checked={allEnabled}
+          ref={(el) => {
+            if (el) el.indeterminate = enabledCount > 0 && !allEnabled
+          }}
+          onChange={() => onSetAllEnabled(!allEnabled)}
+        />
         <h3 style={{ margin: 0, flex: 1 }}>
-          Regions ({regions.length}
+          Regions ({enabledCount}/{regions.length}
           {flaggedCount > 0 ? <span style={{ color: 'var(--danger)' }}> · ⚑{flaggedCount}</span> : null})
         </h3>
         <select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}>

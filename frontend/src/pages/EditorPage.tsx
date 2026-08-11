@@ -29,6 +29,7 @@ export default function EditorPage() {
   const [cleanPageUrl, setCleanPageUrl] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const drawingRef = useRef(false)
+  const brushSubtractRef = useRef(false)
 
   const { data: page } = useQuery({ queryKey: pageKey, queryFn: () => api.getPage(projectId, pageId) })
   const { data: toolsStatus } = useQuery({ queryKey: ['tools-status'], queryFn: api.toolsStatus, staleTime: Infinity })
@@ -142,6 +143,19 @@ export default function EditorPage() {
     },
     onError,
   })
+  const brushStroke = useMutation({
+    mutationFn: (body: Parameters<typeof api.brush>[2]) => api.brush(projectId, pageId, body),
+    onSuccess: (region) => {
+      invalidate()
+      useEditorStore.getState().setSelected([region.id])
+    },
+    onError,
+  })
+  const setAllEnabled = useMutation({
+    mutationFn: (enabled: boolean) => api.setEnabled(projectId, pageId, enabled),
+    onSuccess: invalidate,
+    onError,
+  })
 
   const finishDraft = useCallback(() => {
     const store = useEditorStore.getState()
@@ -172,7 +186,11 @@ export default function EditorPage() {
   // Keyboard shortcuts.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return
+      // Swallow shortcuts only while typing/choosing — a focused checkbox or
+      // slider (e.g. after clicking the select-all box) must not eat them.
+      const target = event.target
+      if (target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return
+      if (target instanceof HTMLInputElement && target.type !== 'checkbox' && target.type !== 'range') return
       const store = useEditorStore.getState()
       if (event.key === 'Escape') {
         store.clearDraft()
@@ -187,8 +205,12 @@ export default function EditorPage() {
       } else if (event.key === 'v') store.setTool('select')
       else if (event.key === 'p') store.setTool('polygon')
       else if (event.key === 'l') store.setTool('lasso')
+      else if (event.key === 'b') store.setTool('brush')
       else if (event.key === 'a') approveSelected()
       else if (event.key === 'n') nextFlagged()
+      else if (event.key === 'd') store.toggleDimBackground()
+      else if (event.key === '[') store.setBrushSize(store.brushSize - 6)
+      else if (event.key === ']') store.setBrushSize(store.brushSize + 6)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -231,6 +253,40 @@ export default function EditorPage() {
           finishDraft()
         }
         break
+
+      case 'brush': {
+        if (event.kind === 'move') setCursor(event.point)
+        if (event.kind === 'down') {
+          event.preventDefault()
+          drawingRef.current = true
+          brushSubtractRef.current = store.brushMode === 'subtract' || event.altKey
+          store.setDraftPoints([event.point])
+        } else if (event.kind === 'move' && drawingRef.current) {
+          const last = store.draftPoints[store.draftPoints.length - 1]
+          const step = Math.max(2, store.brushSize / 4)
+          if (!last || Math.hypot(event.point[0] - last[0], event.point[1] - last[1]) > step) {
+            store.appendDraftPoint(event.point)
+          }
+        } else if (event.kind === 'up' && drawingRef.current) {
+          drawingRef.current = false
+          const points = store.draftPoints
+          store.clearDraft()
+          if (points.length === 0) break
+          const subtract = brushSubtractRef.current
+          const target = store.selectedIds.length === 1 ? store.selectedIds[0] : undefined
+          if (subtract && !target) {
+            setActionError('Select a region first to subtract from it')
+            break
+          }
+          brushStroke.mutate({
+            region_id: target,
+            points,
+            radius: store.brushSize,
+            mode: subtract ? 'subtract' : 'add',
+          })
+        }
+        break
+      }
 
       case 'sam-point':
         if (event.kind === 'down') {
@@ -299,19 +355,14 @@ export default function EditorPage() {
       >
         <RegionOverlay
           regions={page.regions}
+          width={page.width}
+          height={page.height}
           onPatchPolygon={(regionId, polygon) => patchRegion.mutate({ regionId, patch: { polygon } })}
         />
-        <PolygonTool cursor={draftPoints.length > 0 ? cursor : null} />
+        <PolygonTool cursor={tool === 'brush' || draftPoints.length > 0 ? cursor : null} />
       </PageCanvas>
       <div className="sidebar">
         <DetectParamsPanel detecting={detect.isPending} onDetect={(params) => detect.mutate(params)} />
-        <RegionList
-          regions={page.regions}
-          onToggleEnabled={(region) =>
-            patchRegion.mutate({ regionId: region.id, patch: { enabled: !region.enabled } })
-          }
-          onRename={(region, label) => patchRegion.mutate({ regionId: region.id, patch: { label } })}
-        />
         <ExportPanel
           exporting={exportPage.isPending}
           exports={exports}
@@ -322,6 +373,14 @@ export default function EditorPage() {
           onExport={(options, regionIds) => exportPage.mutate({ options, regionIds })}
           onExportCleanPage={(options) => exportCleanPage.mutate(options)}
           onExportSvg={(regionId, options) => exportSvg.mutate({ regionId, options })}
+        />
+        <RegionList
+          regions={page.regions}
+          onToggleEnabled={(region) =>
+            patchRegion.mutate({ regionId: region.id, patch: { enabled: !region.enabled } })
+          }
+          onSetAllEnabled={(enabled) => setAllEnabled.mutate(enabled)}
+          onRename={(region, label) => patchRegion.mutate({ regionId: region.id, patch: { label } })}
         />
       </div>
     </div>

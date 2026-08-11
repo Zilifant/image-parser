@@ -26,6 +26,16 @@ const fail = (message) => {
   process.exitCode = 1
 }
 
+const waitForCount = async (locator, expected, timeoutMs = 8000) => {
+  const start = Date.now()
+  let count = await locator.count()
+  while (count !== expected && Date.now() - start < timeoutMs) {
+    await page.waitForTimeout(200)
+    count = await locator.count()
+  }
+  return count
+}
+
 await page.goto('http://localhost:5173/')
 
 // Create a project and upload the sample scan.
@@ -70,6 +80,33 @@ console.log('clean page exported')
 // Contact sheet link present after export.
 if ((await page.locator('a:has-text("Contact sheet")').count()) !== 1) fail('contact sheet link missing')
 
+// Bulk deselect/reselect via the master checkbox.
+const master = page.locator('.regions-section .row input[type="checkbox"]').first()
+await master.click()
+await page.waitForTimeout(600)
+let checked = await page.locator('.region-list input[type="checkbox"]:checked').count()
+if (checked !== 0) fail(`bulk deselect left ${checked} regions enabled`)
+await master.click()
+await page.waitForTimeout(600)
+checked = await page.locator('.region-list input[type="checkbox"]:checked').count()
+if (checked < regionCount) fail(`bulk reselect enabled only ${checked}`)
+console.log('bulk select/deselect ok')
+
+// Brush: paint a stroke on an empty area -> creates a new region.
+await page.keyboard.press('Escape')
+await page.click('button:has-text("Brush")')
+const canvasBox = await page.locator('.canvas-wrap').boundingBox()
+await page.mouse.move(canvasBox.x + canvasBox.width * 0.35, canvasBox.y + canvasBox.height * 0.35)
+await page.mouse.down()
+await page.mouse.move(canvasBox.x + canvasBox.width * 0.42, canvasBox.y + canvasBox.height * 0.35, { steps: 8 })
+await page.mouse.up()
+const afterBrush = await waitForCount(page.locator('svg polygon'), regionCount + 1)
+console.log('regions after brush stroke:', afterBrush)
+if (afterBrush !== regionCount + 1) fail('brush stroke did not create a region')
+await page.keyboard.press('Delete')
+await waitForCount(page.locator('svg polygon'), regionCount)
+await page.click('button:has-text("Select")')
+
 // Manual polygon: 4 clicks + Enter creates a region.
 await page.click('button:has-text("Polygon")')
 const box = await page.locator('.canvas-wrap').boundingBox()
@@ -78,8 +115,7 @@ for (const [fx, fy] of [[0.3, 0.3], [0.45, 0.3], [0.45, 0.45], [0.3, 0.45]]) {
   await page.waitForTimeout(100)
 }
 await page.keyboard.press('Enter')
-await page.waitForTimeout(800)
-const afterManual = await page.locator('svg polygon').count()
+const afterManual = await waitForCount(page.locator('svg polygon'), regionCount + 1)
 console.log('regions after manual polygon:', afterManual)
 if (afterManual !== regionCount + 1) fail('manual polygon did not create a region')
 

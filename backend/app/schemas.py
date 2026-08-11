@@ -50,6 +50,18 @@ class MergeRequest(BaseModel):
     region_ids: list[str] = Field(min_length=2)
 
 
+class BrushRequest(BaseModel):
+    region_id: Optional[str] = None  # None + mode=add creates a new region
+    points: list[Point] = Field(min_length=1)
+    radius: float = Field(12, ge=1, le=200)
+    mode: Literal["add", "subtract"] = "add"
+
+
+class SetEnabledRequest(BaseModel):
+    enabled: bool
+    region_ids: Optional[list[str]] = None  # None = all regions
+
+
 class SplitRequest(BaseModel):
     params: Optional[DetectParams] = None
 
