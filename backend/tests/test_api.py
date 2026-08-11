@@ -75,6 +75,48 @@ def test_full_flow(client):
     assert export.content[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+def test_review_and_profiles(client):
+    project_id, page_id = _create_project_with_page(client)
+    regions = client.post(f"/api/projects/{project_id}/pages/{page_id}/detect", json={}).json()
+
+    # Approve a region.
+    region_id = regions[0]["id"]
+    response = client.patch(
+        f"/api/projects/{project_id}/pages/{page_id}/regions/{region_id}",
+        json={"status": "approved"},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "approved"
+
+    # Built-in profiles exist; a custom one can be saved and applied.
+    profiles = client.get("/api/profiles").json()
+    assert any(p["name"] == "dense-collages" and p["builtin"] for p in profiles)
+    response = client.put(
+        "/api/profiles",
+        json={"name": "my-scans", "builtin": False, "detect": {"merge_radius": 9}, "export": {"rgb": "pure_white"}},
+    )
+    assert response.status_code == 200
+    assert any(p["name"] == "my-scans" for p in client.get("/api/profiles").json())
+
+    # Clean full-page export.
+    response = client.post(
+        f"/api/projects/{project_id}/pages/{page_id}/export-clean-page", json={"rgb": "pure_white"}
+    )
+    assert response.status_code == 200
+    clean = client.get(response.json()["url"])
+    assert clean.status_code == 200 and clean.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    # Contact sheet requires exports, then renders.
+    assert client.get(f"/api/projects/{project_id}/pages/{page_id}/contact-sheet.png").status_code == 404
+    client.post(f"/api/projects/{project_id}/pages/{page_id}/export", json={})
+    sheet = client.get(f"/api/projects/{project_id}/pages/{page_id}/contact-sheet.png")
+    assert sheet.status_code == 200 and sheet.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    # QC results are persisted on regions after export.
+    page = client.get(f"/api/projects/{project_id}/pages/{page_id}").json()
+    assert all("qc_issues" in region for region in page["regions"])
+
+
 def test_detect_all_job(client, tmp_path):
     project_id, _ = _create_project_with_page(client)
     with open(SAMPLE, "rb") as f:

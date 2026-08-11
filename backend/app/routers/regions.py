@@ -39,6 +39,8 @@ def create_region(project_id: str, page_id: str, body: PolygonCreate):
         "enabled": True,
         "label": _next_label(page, "manual"),
         "has_mask": False,
+        "status": "provisional",
+        "qc_issues": [],
     }
     page["regions"].append(region)
     store.save_page(project_id, page)
@@ -64,6 +66,10 @@ def patch_region(project_id: str, page_id: str, region_id: str, body: RegionPatc
         region["enabled"] = body.enabled
     if body.label is not None:
         region["label"] = body.label
+    if body.status is not None:
+        region["status"] = body.status
+        if body.status == "approved":
+            region["qc_issues"] = []
     store.save_page(project_id, page)
     return region
 
@@ -114,6 +120,8 @@ def merge_regions(project_id: str, page_id: str, body: MergeRequest):
         "enabled": True,
         "label": _next_label(page, "merged"),
         "has_mask": len(contours) > 1,  # disjoint parts: polygon alone is lossy
+        "status": "provisional",
+        "qc_issues": [],
     }
     if merged["has_mask"]:
         store.save_mask(project_id, page_id, merged["id"], combined)

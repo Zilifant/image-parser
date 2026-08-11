@@ -11,15 +11,21 @@ const TOOLS: { id: Tool; label: string; title: string; sam?: boolean }[] = [
 export default function Toolbar({
   samAvailable,
   selectedCount,
+  flaggedCount,
   onMerge,
   onSplit,
   onDelete,
+  onApprove,
+  onNextFlagged,
 }: {
   samAvailable: boolean
   selectedCount: number
+  flaggedCount: number
   onMerge: () => void
   onSplit: () => void
   onDelete: () => void
+  onApprove: () => void
+  onNextFlagged: () => void
 }) {
   const tool = useEditorStore((state) => state.tool)
   const setTool = useEditorStore((state) => state.setTool)
@@ -49,6 +55,13 @@ export default function Toolbar({
       </button>
       <button disabled={selectedCount === 0} className="danger" title="Delete selected (⌫)" onClick={onDelete}>
         Delete
+      </button>
+      <span style={{ width: 12 }} />
+      <button disabled={selectedCount === 0} title="Mark selected as approved (A)" onClick={onApprove}>
+        Approve
+      </button>
+      <button disabled={flaggedCount === 0} title="Jump to the next flagged region (N)" onClick={onNextFlagged}>
+        Next ⚑{flaggedCount > 0 ? ` (${flaggedCount})` : ''}
       </button>
     </div>
   )

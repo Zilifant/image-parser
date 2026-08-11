@@ -6,9 +6,12 @@ import type {
   Page,
   PageSummary,
   Point,
+  Profile,
   Project,
   Region,
+  RegionExport,
   SamStatus,
+  ToolsStatus,
 } from './types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -71,7 +74,7 @@ export const api = {
     projectId: string,
     pageId: string,
     regionId: string,
-    patch: Partial<Pick<Region, 'polygon' | 'enabled' | 'label'>>,
+    patch: Partial<Pick<Region, 'polygon' | 'enabled' | 'label' | 'status'>>,
   ) =>
     request<Region>(`/projects/${projectId}/pages/${pageId}/regions/${regionId}`, {
       method: 'PATCH',
@@ -91,10 +94,28 @@ export const api = {
     }),
 
   exportPage: (projectId: string, pageId: string, options: ExportOptions, regionIds?: string[]) =>
-    request<{ exports: { region_id: string; url: string }[] }>(
-      `/projects/${projectId}/pages/${pageId}/export`,
-      { method: 'POST', body: JSON.stringify({ ...options, region_ids: regionIds ?? null }) },
+    request<{ exports: RegionExport[] }>(`/projects/${projectId}/pages/${pageId}/export`, {
+      method: 'POST',
+      body: JSON.stringify({ ...options, region_ids: regionIds ?? null }),
+    }),
+  exportCleanPage: (projectId: string, pageId: string, options: ExportOptions) =>
+    request<{ url: string }>(`/projects/${projectId}/pages/${pageId}/export-clean-page`, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    }),
+  exportSvg: (projectId: string, pageId: string, regionId: string, options: ExportOptions) =>
+    request<{ export_url: string }>(
+      `/projects/${projectId}/pages/${pageId}/regions/${regionId}/export-svg`,
+      { method: 'POST', body: JSON.stringify(options) },
     ),
+  contactSheetUrl: (projectId: string, pageId: string) =>
+    `/api/projects/${projectId}/pages/${pageId}/contact-sheet.png`,
+
+  listProfiles: () => request<Profile[]>('/profiles'),
+  saveProfile: (profile: Profile) =>
+    request<Profile>('/profiles', { method: 'PUT', body: JSON.stringify(profile) }),
+
+  toolsStatus: () => request<ToolsStatus>('/tools/status'),
 
   detectAll: (projectId: string, params?: DetectParams) =>
     request<JobStatus>(`/projects/${projectId}/detect-all`, {

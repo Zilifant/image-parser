@@ -1,37 +1,51 @@
-import { useState } from 'react'
-
-import type { ExportOptions } from '../api/types'
+import type { ExportOptions, RegionExport } from '../api/types'
 import { useEditorStore } from '../state/editorStore'
 
 export default function ExportPanel({
   onExport,
+  onExportCleanPage,
+  onExportSvg,
   exporting,
-  exportUrls,
+  exports,
+  cleanPageUrl,
+  contactSheetUrl,
+  hasExports,
+  potraceAvailable,
 }: {
   onExport: (options: ExportOptions, regionIds?: string[]) => void
+  onExportCleanPage: (options: ExportOptions) => void
+  onExportSvg: (regionId: string, options: ExportOptions) => void
   exporting: boolean
-  exportUrls: string[]
+  exports: RegionExport[]
+  cleanPageUrl: string | null
+  contactSheetUrl: string
+  hasExports: boolean
+  potraceAvailable: boolean
 }) {
   const selectedIds = useEditorStore((state) => state.selectedIds)
-  const [style, setStyle] = useState<ExportOptions['style']>('ink')
-  const [rgb, setRgb] = useState<ExportOptions['rgb']>('original')
-  const [padding, setPadding] = useState(4)
-
-  const options: ExportOptions = { style, rgb, padding }
+  const options = useEditorStore((state) => state.exportOptions)
+  const setOptions = useEditorStore((state) => state.setExportOptions)
 
   return (
     <section>
       <h3>Export</h3>
       <div className="field">
         <label>Alpha style</label>
-        <select value={style} onChange={(event) => setStyle(event.target.value as ExportOptions['style'])}>
+        <select
+          value={options.style}
+          onChange={(event) => setOptions({ ...options, style: event.target.value as ExportOptions['style'] })}
+        >
           <option value="ink">ink (soft)</option>
           <option value="binary">binary (hard)</option>
         </select>
       </div>
       <div className="field">
         <label>Color</label>
-        <select value={rgb} onChange={(event) => setRgb(event.target.value as ExportOptions['rgb'])}>
+        <select
+          value={options.rgb}
+          onChange={(event) => setOptions({ ...options, rgb: event.target.value as ExportOptions['rgb'] })}
+        >
+          <option value="pure_white">pure white</option>
           <option value="original">original</option>
           <option value="pure_black">pure black</option>
         </select>
@@ -42,27 +56,57 @@ export default function ExportPanel({
           type="number"
           min={0}
           max={64}
-          value={padding}
+          value={options.padding}
           style={{ width: 64 }}
-          onChange={(event) => setPadding(Number(event.target.value))}
+          onChange={(event) => setOptions({ ...options, padding: Number(event.target.value) })}
         />
       </div>
       <div className="row">
-        <button
-          disabled={exporting || selectedIds.length === 0}
-          onClick={() => onExport(options, selectedIds)}
-        >
+        <button disabled={exporting || selectedIds.length === 0} onClick={() => onExport(options, selectedIds)}>
           Export selected ({selectedIds.length})
         </button>
         <button className="primary" disabled={exporting} onClick={() => onExport(options)}>
           {exporting ? 'Exporting…' : 'Export page'}
         </button>
       </div>
-      {exportUrls.length > 0 ? (
+      <div className="row" style={{ marginTop: 8 }}>
+        <button title="Whole page cleaned: all ink kept, background transparent" onClick={() => onExportCleanPage(options)}>
+          Clean full page
+        </button>
+        {potraceAvailable ? (
+          <button
+            disabled={selectedIds.length !== 1}
+            title="Vectorize the selected region with potrace"
+            onClick={() => onExportSvg(selectedIds[0], options)}
+          >
+            Export SVG
+          </button>
+        ) : null}
+        {hasExports ? (
+          <a href={contactSheetUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', fontSize: 13 }}>
+            Contact sheet ↗
+          </a>
+        ) : null}
+      </div>
+      {cleanPageUrl ? (
+        <div className="hint" style={{ marginTop: 6 }}>
+          Cleaned page:{' '}
+          <a href={cleanPageUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
+            open ↗
+          </a>
+        </div>
+      ) : null}
+      {exports.length > 0 ? (
         <div className="export-strip">
-          {exportUrls.map((url) => (
-            <a key={url} href={url} target="_blank" rel="noreferrer" title="Open full size">
-              <img src={url} alt="" />
+          {exports.map((entry) => (
+            <a
+              key={entry.url}
+              href={entry.url}
+              target="_blank"
+              rel="noreferrer"
+              title={entry.qc_issues.length ? `QC: ${entry.qc_issues.join(', ')}` : 'Open full size'}
+            >
+              <img src={entry.url} alt="" style={entry.qc_issues.length ? { borderColor: 'var(--danger)', borderWidth: 2 } : undefined} />
             </a>
           ))}
         </div>

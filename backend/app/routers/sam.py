@@ -43,6 +43,8 @@ def sam_predict(project_id: str, page_id: str, body: SamPredictRequest):
         "enabled": True,
         "label": f"sam-{sum(1 for r in page['regions'] if r['source'] == 'sam') + 1:02d}",
         "has_mask": True,
+        "status": "provisional",
+        "qc_issues": [],
     }
     store.save_mask(project_id, page_id, region["id"], mask)
     page["regions"].append(region)

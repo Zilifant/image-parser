@@ -10,6 +10,7 @@ export interface DetectParams {
 }
 
 export type RegionSource = 'auto' | 'manual' | 'sam' | 'merge'
+export type RegionStatus = 'provisional' | 'approved' | 'flagged'
 
 export interface Region {
   id: string
@@ -20,6 +21,8 @@ export interface Region {
   enabled: boolean
   label: string
   has_mask: boolean
+  status: RegionStatus
+  qc_issues: string[]
 }
 
 export interface PageSummary {
@@ -68,11 +71,29 @@ export interface JobStatus {
 
 export interface ExportOptions {
   style: 'ink' | 'binary'
-  rgb: 'original' | 'pure_black'
+  rgb: 'pure_white' | 'original' | 'pure_black'
   padding: number
 }
 
 export interface SamStatus {
   available: boolean
   model: string | null
+}
+
+export interface Profile {
+  name: string
+  builtin: boolean
+  detect: DetectParams
+  export: ExportOptions
+}
+
+export interface ToolsStatus {
+  sam: boolean
+  potrace: boolean
+}
+
+export interface RegionExport {
+  region_id: string
+  url: string
+  qc_issues: string[]
 }

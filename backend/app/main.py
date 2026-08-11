@@ -1,6 +1,6 @@
 from fastapi import APIRouter, FastAPI
 
-from .routers import export, fs, jobs, pages, projects, regions, sam
+from .routers import export, fs, jobs, pages, profiles, projects, regions, sam, tools
 
 app = FastAPI(title="image-parser")
 
@@ -12,6 +12,8 @@ api.include_router(export.router)
 api.include_router(jobs.router)
 api.include_router(fs.router)
 api.include_router(sam.router)
+api.include_router(profiles.router)
+api.include_router(tools.router)
 
 
 @api.get("/health")

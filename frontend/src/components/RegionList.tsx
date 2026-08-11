@@ -17,20 +17,27 @@ export default function RegionList({
   const toggleSelected = useEditorStore((state) => state.toggleSelected)
   const setHovered = useEditorStore((state) => state.setHovered)
   const [editing, setEditing] = useState<string | null>(null)
-  const [sort, setSort] = useState<'position' | 'confidence' | 'area'>('position')
+  const [sort, setSort] = useState<'position' | 'confidence' | 'area' | 'flagged'>('position')
 
   const sorted = [...regions]
   if (sort === 'confidence') sorted.sort((a, b) => a.confidence - b.confidence)
   if (sort === 'area') sorted.sort((a, b) => b.bbox[2] * b.bbox[3] - a.bbox[2] * a.bbox[3])
+  if (sort === 'flagged') sorted.sort((a, b) => Number(b.status === 'flagged') - Number(a.status === 'flagged'))
+
+  const flaggedCount = regions.filter((region) => region.status === 'flagged').length
 
   return (
     <section style={{ flex: 1 }}>
       <div className="row" style={{ marginBottom: 6 }}>
-        <h3 style={{ margin: 0, flex: 1 }}>Regions ({regions.length})</h3>
+        <h3 style={{ margin: 0, flex: 1 }}>
+          Regions ({regions.length}
+          {flaggedCount > 0 ? <span style={{ color: 'var(--danger)' }}> · ⚑{flaggedCount}</span> : null})
+        </h3>
         <select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}>
           <option value="position">position</option>
           <option value="confidence">confidence ↑</option>
           <option value="area">area ↓</option>
+          <option value="flagged">flagged first</option>
         </select>
       </div>
       <ul className="region-list">
@@ -65,7 +72,9 @@ export default function RegionList({
             ) : (
               <span
                 className="label"
-                title={`${region.label} (${region.source}) — double-click to rename`}
+                title={`${region.label} (${region.source}${
+                  region.qc_issues.length ? `; QC: ${region.qc_issues.join(', ')}` : ''
+                }) — double-click to rename`}
                 onClick={(event) => {
                   if (event.shiftKey) toggleSelected(region.id)
                   else setSelected([region.id])
@@ -75,6 +84,15 @@ export default function RegionList({
                 {region.label}
               </span>
             )}
+            {region.status === 'flagged' ? (
+              <span title={region.qc_issues.length ? region.qc_issues.join(', ') : 'flagged for review'} style={{ color: 'var(--danger)' }}>
+                ⚑
+              </span>
+            ) : region.status === 'approved' ? (
+              <span title="approved" style={{ color: 'var(--accent-2)' }}>
+                ✓
+              </span>
+            ) : null}
             <span className="conf">{region.confidence.toFixed(2)}</span>
           </li>
         ))}

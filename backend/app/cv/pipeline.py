@@ -158,16 +158,32 @@ def detect_regions(
     regions = []
     for i, blob in enumerate(blobs):
         x, y, bw, bh = blob.bbox
+        confidence = _confidence(blob.contour, float(bw * bh), page_area)
         regions.append(
             {
                 "id": new_id("r"),
                 "bbox": [int(x), int(y), int(bw), int(bh)],
                 "polygon": contour_to_polygon(blob.contour),
                 "source": "auto",
-                "confidence": _confidence(blob.contour, float(bw * bh), page_area),
+                "confidence": confidence,
                 "enabled": True,
                 "label": f"element-{i + 1:02d}",
                 "has_mask": False,
+                "status": _auto_status(confidence, (x, y, bw, bh), (h, w)),
+                "qc_issues": [],
             }
         )
     return regions
+
+
+def _auto_status(
+    confidence: float, bbox: tuple[int, int, int, int], shape: tuple[int, int]
+) -> str:
+    """Flag suspicious regions so review can jump straight to them."""
+    x, y, bw, bh = bbox
+    h, w = shape
+    touches_border = x <= 2 or y <= 2 or x + bw >= w - 2 or y + bh >= h - 2
+    very_large = bw * bh > 0.25 * h * w  # likely several designs merged
+    if confidence < 0.55 or touches_border or very_large:
+        return "flagged"
+    return "provisional"

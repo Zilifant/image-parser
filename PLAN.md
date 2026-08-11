@@ -146,6 +146,41 @@ Expected on the sample: the Arabic-labeled central diagram and bottom banner com
 - `test_api.py` (TestClient, `tmp_path` DATA_DIR): create project → upload → detect → PATCH polygon → export page → export file exists and is a valid PNG; one detect-all job test.
 - Frontend: no unit tests in v1; manual verification per milestone checklists.
 
+## Alignment with the project brief (added after the brief was shared)
+
+The user's ChatGPT project brief ("Local Bulk Image Processing & Segmentation
+App") confirmed the architecture above and added requirements that are now
+implemented:
+
+- **White-on-transparency is the core transform and the default export**
+  (`rgb: pure_white`), plus a whole-page "clean" export
+  (`cv/matte.py:clean_page`, `/export-clean-page`).
+- **Review workflow**: regions carry `status`
+  (provisional/approved/flagged); detection auto-flags suspicious regions
+  (low confidence, border-touching, very large). UI: Approve (A), Next
+  flagged (N), flagged-first sorting, dashed red overlays.
+- **Automated quality checks** (`cv/qc.py`) on every export — alpha present,
+  non-empty foreground, min dimensions, foreground not cut off at the crop
+  edge, foreground color correct. Failures flag the region back into review.
+- **Contact sheet** per page (`/contact-sheet.png`, Pillow grid with labels).
+- **Processing profiles** (`app/profiles.py`, `/api/profiles`): built-ins
+  `clean-photocopies`, `yellowed-magazines`, `low-contrast-scans`,
+  `dense-collages`; custom profiles saved from the UI.
+- **Potrace adapter** (`cv/potrace_backend.py`): optional SVG export, gated
+  on the binary being installed (like SAM). ImageMagick was not wrapped —
+  OpenCV/Pillow already cover its role here; the adapter pattern makes it
+  easy to add later.
+- **Engine independence / CLI** (`app/cli.py`): the pipeline runs headless
+  (`uv run python -m app.cli <inputs> -o <dir> [--profile ...]`).
+- **Playwright smoke test** committed as `scripts/e2e.mjs`.
+
+**Deliberate deviation**: the brief suggests SQLite for metadata; this build
+uses per-page JSON sidecars (`page.json` is the database). Functionally
+equivalent for a single-user local tool at this scale (persistent, resumable,
+corrections stored as structured metadata), with trivially inspectable state.
+Migrating to SQLite later is straightforward since all reads/writes go
+through `app/store.py`.
+
 ## Critical files
 
 - `backend/app/cv/pipeline.py` — detection pipeline (technical core)

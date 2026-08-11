@@ -50,9 +50,22 @@ def export_region(
 
     if options.rgb == "pure_black":
         rgb = np.zeros_like(crop)
+    elif options.rgb == "pure_white":
+        rgb = np.full_like(crop, 255)
     else:
         rgb = crop
 
     rgba = cv2.cvtColor(rgb, cv2.COLOR_BGR2BGRA)
     rgba[:, :, 3] = alpha
     return rgba
+
+
+def clean_page(bgr: np.ndarray, options: ExportOptions) -> np.ndarray:
+    """Whole-page cleanup: all ink kept, background transparent.
+
+    Produces the brief's "clean white-on-transparent full-page PNG" (or the
+    other rgb modes) without any region segmentation.
+    """
+    h, w = bgr.shape[:2]
+    full = np.full((h, w), 255, np.uint8)
+    return export_region(bgr, (0, 0, w, h), full, options.model_copy(update={"padding": 0}))

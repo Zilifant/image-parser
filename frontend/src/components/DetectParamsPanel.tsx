@@ -1,4 +1,7 @@
-import type { DetectParams } from '../api/types'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+
+import { api } from '../api/client'
+import type { DetectParams, Profile } from '../api/types'
 import { useEditorStore } from '../state/editorStore'
 
 export default function DetectParamsPanel({
@@ -8,8 +11,22 @@ export default function DetectParamsPanel({
   onDetect: (params: DetectParams) => void
   detecting: boolean
 }) {
+  const queryClient = useQueryClient()
   const params = useEditorStore((state) => state.detectParamsDraft)
   const setParams = useEditorStore((state) => state.setDetectParamsDraft)
+
+  const { data: profiles } = useQuery({ queryKey: ['profiles'], queryFn: api.listProfiles })
+  const saveProfile = useMutation({
+    mutationFn: (profile: Profile) => api.saveProfile(profile),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['profiles'] }),
+  })
+
+  const applyProfile = (name: string) => {
+    const profile = profiles?.find((entry) => entry.name === name)
+    if (!profile) return
+    setParams(profile.detect)
+    useEditorStore.getState().setExportOptions(profile.export)
+  }
 
   const merge = params.merge_radius ?? 0
   const minArea = params.min_area_frac ?? 0.0002
@@ -19,6 +36,34 @@ export default function DetectParamsPanel({
   return (
     <section>
       <h3>Auto-detect</h3>
+      <div className="field">
+        <label>Profile</label>
+        <select defaultValue="" onChange={(event) => applyProfile(event.target.value)}>
+          <option value="" disabled>
+            apply a profile…
+          </option>
+          {profiles?.map((profile) => (
+            <option key={profile.name} value={profile.name}>
+              {profile.name}
+            </option>
+          ))}
+        </select>
+        <button
+          title="Save current detect + export settings as a named profile"
+          onClick={() => {
+            const name = prompt('Profile name?')?.trim()
+            if (name)
+              saveProfile.mutate({
+                name,
+                builtin: false,
+                detect: params,
+                export: useEditorStore.getState().exportOptions,
+              })
+          }}
+        >
+          Save…
+        </button>
+      </div>
       <div className="field">
         <label>Merge radius</label>
         <input

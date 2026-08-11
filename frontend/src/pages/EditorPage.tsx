@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { api } from '../api/client'
-import type { DetectParams, ExportOptions, Page, Point, Region } from '../api/types'
+import type { DetectParams, ExportOptions, Page, Point, Region, RegionExport } from '../api/types'
 import DetectParamsPanel from '../components/DetectParamsPanel'
 import ExportPanel from '../components/ExportPanel'
 import RegionList from '../components/RegionList'
@@ -25,12 +25,13 @@ export default function EditorPage() {
   const draftPoints = useEditorStore((state) => state.draftPoints)
 
   const [cursor, setCursor] = useState<Point | null>(null)
-  const [exportUrls, setExportUrls] = useState<string[]>([])
+  const [exports, setExports] = useState<RegionExport[]>([])
+  const [cleanPageUrl, setCleanPageUrl] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const drawingRef = useRef(false)
 
   const { data: page } = useQuery({ queryKey: pageKey, queryFn: () => api.getPage(projectId, pageId) })
-  const { data: samStatus } = useQuery({ queryKey: ['sam-status'], queryFn: api.samStatus, staleTime: Infinity })
+  const { data: toolsStatus } = useQuery({ queryKey: ['tools-status'], queryFn: api.toolsStatus, staleTime: Infinity })
 
   // Fresh editor state per page; seed the params panel from the page's params.
   useEffect(() => {
@@ -68,7 +69,7 @@ export default function EditorPage() {
     onError,
   })
   const patchRegion = useMutation({
-    mutationFn: (input: { regionId: string; patch: Partial<Pick<Region, 'polygon' | 'enabled' | 'label'>> }) =>
+    mutationFn: (input: { regionId: string; patch: Partial<Pick<Region, 'polygon' | 'enabled' | 'label' | 'status'>> }) =>
       api.patchRegion(projectId, pageId, input.regionId, input.patch),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: pageKey })
@@ -118,8 +119,19 @@ export default function EditorPage() {
     onSuccess: (result) => {
       invalidate()
       const stamp = Date.now()
-      setExportUrls(result.exports.map((entry) => `${entry.url}?t=${stamp}`))
+      setExports(result.exports.map((entry) => ({ ...entry, url: `${entry.url}?t=${stamp}` })))
     },
+    onError,
+  })
+  const exportCleanPage = useMutation({
+    mutationFn: (options: ExportOptions) => api.exportCleanPage(projectId, pageId, options),
+    onSuccess: (result) => setCleanPageUrl(`${result.url}?t=${Date.now()}`),
+    onError,
+  })
+  const exportSvg = useMutation({
+    mutationFn: (input: { regionId: string; options: ExportOptions }) =>
+      api.exportSvg(projectId, pageId, input.regionId, input.options),
+    onSuccess: (result) => window.open(result.export_url, '_blank'),
     onError,
   })
   const samPredict = useMutation({
@@ -141,6 +153,22 @@ export default function EditorPage() {
     if (points.length >= 3) createRegion.mutate(points)
   }, [createRegion])
 
+  const approveSelected = useCallback(() => {
+    const ids = useEditorStore.getState().selectedIds
+    ids.forEach((id) => patchRegion.mutate({ regionId: id, patch: { status: 'approved' } }))
+  }, [patchRegion])
+
+  const nextFlagged = useCallback(() => {
+    const regions = queryClient.getQueryData<Page>(pageKey)?.regions ?? []
+    const flagged = regions.filter((region) => region.status === 'flagged')
+    if (flagged.length === 0) return
+    const store = useEditorStore.getState()
+    const current = store.selectedIds.length === 1 ? store.selectedIds[0] : null
+    const index = flagged.findIndex((region) => region.id === current)
+    store.setSelected([flagged[(index + 1) % flagged.length].id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryClient, projectId, pageId])
+
   // Keyboard shortcuts.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -159,10 +187,12 @@ export default function EditorPage() {
       } else if (event.key === 'v') store.setTool('select')
       else if (event.key === 'p') store.setTool('polygon')
       else if (event.key === 'l') store.setTool('lasso')
+      else if (event.key === 'a') approveSelected()
+      else if (event.key === 'n') nextFlagged()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [deleteRegion, finishDraft])
+  }, [deleteRegion, finishDraft, approveSelected, nextFlagged])
 
   const handleCanvasPointer = (event: CanvasPointerEvent) => {
     const store = useEditorStore.getState()
@@ -239,14 +269,17 @@ export default function EditorPage() {
       <div className="topbar">
         <Link to={`/projects/${projectId}`}>← {page.name}</Link>
         <Toolbar
-          samAvailable={samStatus?.available ?? false}
+          samAvailable={toolsStatus?.sam ?? false}
           selectedCount={selectedIds.length}
+          flaggedCount={page.regions.filter((region) => region.status === 'flagged').length}
           onMerge={() => mergeRegions.mutate(selectedIds)}
           onSplit={() => splitRegion.mutate(selectedIds[0])}
           onDelete={() => {
             selectedIds.forEach((id) => deleteRegion.mutate(id))
             useEditorStore.getState().setSelected([])
           }}
+          onApprove={approveSelected}
+          onNextFlagged={nextFlagged}
         />
         <span className="spacer" />
         {samPredict.isPending ? <span className="hint">SAM…</span> : null}
@@ -281,8 +314,14 @@ export default function EditorPage() {
         />
         <ExportPanel
           exporting={exportPage.isPending}
-          exportUrls={exportUrls}
+          exports={exports}
+          cleanPageUrl={cleanPageUrl}
+          contactSheetUrl={api.contactSheetUrl(projectId, pageId)}
+          hasExports={exports.length > 0 || page.export_count > 0}
+          potraceAvailable={toolsStatus?.potrace ?? false}
           onExport={(options, regionIds) => exportPage.mutate({ options, regionIds })}
+          onExportCleanPage={(options) => exportCleanPage.mutate(options)}
+          onExportSvg={(regionId, options) => exportSvg.mutate({ regionId, options })}
         />
       </div>
     </div>

@@ -40,14 +40,16 @@ export default function RegionOverlay({
         const color = SOURCE_COLORS[region.source]
         const isSelected = selectedIds.includes(region.id)
         const isHovered = hoveredId === region.id
+        const isFlagged = region.status === 'flagged'
         return (
           <polygon
             key={region.id}
             points={polygonToSvgPoints(polygon)}
-            fill={region.enabled ? color : '#888888'}
+            fill={region.enabled ? (isFlagged ? '#e06c75' : color) : '#888888'}
             fillOpacity={isSelected ? 0.28 : isHovered ? 0.22 : region.enabled ? 0.12 : 0.05}
-            stroke={isSelected ? '#ffb454' : region.enabled ? color : '#888888'}
+            stroke={isSelected ? '#ffb454' : isFlagged ? '#e06c75' : region.enabled ? color : '#888888'}
             strokeWidth={isSelected ? 2.5 : 1.5}
+            strokeDasharray={isFlagged && !isSelected ? '6 3' : undefined}
             vectorEffect="non-scaling-stroke"
             style={{ pointerEvents: selectable ? 'auto' : 'none', cursor: 'pointer' }}
             onPointerDown={(event) => {

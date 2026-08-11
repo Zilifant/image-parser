@@ -19,6 +19,9 @@ class DetectParams(BaseModel):
     mode: Literal["adaptive", "otsu"] = "adaptive"
 
 
+RegionStatus = Literal["provisional", "approved", "flagged"]
+
+
 class Region(BaseModel):
     id: str
     bbox: tuple[int, int, int, int]  # x, y, w, h
@@ -28,12 +31,15 @@ class Region(BaseModel):
     enabled: bool = True
     label: str = ""
     has_mask: bool = False
+    status: RegionStatus = "provisional"
+    qc_issues: list[str] = []
 
 
 class RegionPatch(BaseModel):
     polygon: Optional[list[Point]] = None
     enabled: Optional[bool] = None
     label: Optional[str] = None
+    status: Optional[RegionStatus] = None
 
 
 class PolygonCreate(BaseModel):
@@ -50,7 +56,9 @@ class SplitRequest(BaseModel):
 
 class ExportOptions(BaseModel):
     style: Literal["ink", "binary"] = "ink"
-    rgb: Literal["original", "pure_black"] = "original"
+    # pure_white is the default: the target output is white artwork on
+    # transparency (see the project brief).
+    rgb: Literal["pure_white", "original", "pure_black"] = "pure_white"
     padding: int = Field(4, ge=0, le=64)
 
 
@@ -111,6 +119,18 @@ class JobStatus(BaseModel):
     done: int = 0
     total: int = 0
     error: Optional[str] = None
+
+
+class Profile(BaseModel):
+    name: str = Field(min_length=1)
+    builtin: bool = False
+    detect: DetectParams = DetectParams()
+    export: ExportOptions = ExportOptions()
+
+
+class ToolsStatus(BaseModel):
+    sam: bool
+    potrace: bool
 
 
 class SamPoint(BaseModel):
