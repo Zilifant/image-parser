@@ -78,6 +78,18 @@ Restart the app; **SAM point** (click an element) and **SAM box** (drag around
 one) appear in the editor toolbar. Without the checkpoint the app runs fine and
 simply hides those tools.
 
+## File-safety guarantees
+
+- Source scans are **never modified** — ingestion reads them and works on a
+  copy inside `data/`.
+- All app writes/deletes stay inside `data/`; entity ids are validated
+  before touching the filesystem, so a malformed id can't resolve a delete
+  anywhere else.
+- Deleting a project or page moves it to the **macOS Trash** (recoverable),
+  not permanent deletion.
+- Batch export and the CLI **never overwrite existing files** — name
+  collisions get a `-2`, `-3`, … suffix instead.
+
 ## Tests
 
 ```sh

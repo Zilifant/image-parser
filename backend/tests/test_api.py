@@ -117,6 +117,67 @@ def test_review_and_profiles(client):
     assert all("qc_issues" in region for region in page["regions"])
 
 
+def test_malformed_ids_cannot_reach_the_filesystem(client, tmp_path):
+    """Non-server-generated ids must 404 before any delete/write resolves.
+
+    HTTP clients and browsers normalize '..' out of URLs, so the load-bearing
+    guard is store._check_id — exercise it directly for traversal shapes, and
+    via the API for ids that survive URL normalization.
+    """
+    import pytest
+    from fastapi import HTTPException
+
+    from app import store
+
+    for bad in ("..", ".", "p_..", "p_xyz", "P_12345678", "pg_1234", ""):
+        with pytest.raises(HTTPException):
+            store.project_dir(bad)
+
+    project_id, page_id = _create_project_with_page(client)
+    assert client.delete("/api/projects/not-a-real-id").status_code == 404
+    assert client.delete(f"/api/projects/{project_id}/pages/not-a-real-id").status_code == 404
+
+    # The data dir and the real project are untouched.
+    assert (tmp_path / "projects").exists()
+    assert client.get(f"/api/projects/{project_id}/pages/{page_id}").status_code == 200
+
+
+def test_delete_page_removes_it(client):
+    project_id, page_id = _create_project_with_page(client)
+    assert client.delete(f"/api/projects/{project_id}/pages/{page_id}").status_code == 200
+    assert client.get(f"/api/projects/{project_id}/pages/{page_id}").status_code == 404
+    assert client.get(f"/api/projects/{project_id}").json()["pages"] == []
+
+
+def test_batch_export_never_overwrites(client, tmp_path):
+    project_id, page_id = _create_project_with_page(client)
+    regions = client.post(f"/api/projects/{project_id}/pages/{page_id}/detect", json={}).json()
+    out_dir = tmp_path / "batch-out"
+
+    def run_export():
+        job_id = client.post(
+            f"/api/projects/{project_id}/export-all", json={"out_dir": str(out_dir)}
+        ).json()["id"]
+        for _ in range(240):
+            job = client.get(f"/api/jobs/{job_id}").json()
+            if job["status"] != "running":
+                return job
+            time.sleep(0.25)
+        raise AssertionError("export job did not finish")
+
+    assert run_export()["status"] == "done"
+    first_run = sorted(p.name for p in out_dir.glob("*.png"))
+    assert len(first_run) == len(regions)
+    marker = out_dir / first_run[0]
+    marker.write_bytes(b"sentinel")  # simulate a pre-existing user file
+
+    assert run_export()["status"] == "done"
+    all_files = list(out_dir.glob("*.png"))
+    assert len(all_files) == 2 * len(regions), "second run must add files, not replace"
+    assert marker.read_bytes() == b"sentinel", "existing files are never overwritten"
+    assert any(p.name.endswith("-2.png") for p in all_files)
+
+
 def test_detect_all_job(client, tmp_path):
     project_id, _ = _create_project_with_page(client)
     with open(SAMPLE, "rb") as f:

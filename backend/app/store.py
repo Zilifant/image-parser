@@ -13,7 +13,9 @@ page.json is the source of truth for regions; JSON writes are atomic.
 
 import json
 import os
+import re
 import secrets
+import shutil
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,9 +26,43 @@ from fastapi import HTTPException
 
 from . import config
 
+_ID_RE = re.compile(r"[a-z]+_[0-9a-f]{8}")
+
 
 def new_id(prefix: str) -> str:
     return f"{prefix}_{secrets.token_hex(4)}"
+
+
+def _check_id(entity_id: str) -> str:
+    """IDs are used as path segments; only server-generated shapes are valid.
+
+    This keeps a malformed id (e.g. '..') from ever resolving a delete or
+    write to anything but a real entity directory.
+    """
+    if not _ID_RE.fullmatch(entity_id):
+        raise HTTPException(404, f"invalid id: {entity_id!r}")
+    return entity_id
+
+
+def _remove_dir(path: Path) -> None:
+    """Move a directory to the OS Trash (recoverable); fall back to permanent
+    removal only if the platform/volume has no trash available."""
+    try:
+        from send2trash import send2trash
+
+        send2trash(str(path))
+    except Exception:
+        shutil.rmtree(path)
+
+
+def unique_path(directory: Path, stem: str, suffix: str) -> Path:
+    """First free path like stem.png, stem-2.png, ... — never overwrites."""
+    candidate = directory / f"{stem}{suffix}"
+    counter = 2
+    while candidate.exists():
+        candidate = directory / f"{stem}-{counter}{suffix}"
+        counter += 1
+    return candidate
 
 
 def _write_json_atomic(path: Path, data: dict) -> None:
@@ -51,7 +87,7 @@ def _read_json(path: Path) -> dict:
 
 
 def project_dir(project_id: str) -> Path:
-    return config.PROJECTS_DIR / project_id
+    return config.PROJECTS_DIR / _check_id(project_id)
 
 
 def create_project(name: str) -> dict:
@@ -88,19 +124,17 @@ def list_projects() -> list[dict]:
 
 
 def delete_project(project_id: str) -> None:
-    import shutil
-
     directory = project_dir(project_id)
     if not directory.exists():
         raise HTTPException(404, f"project {project_id} not found")
-    shutil.rmtree(directory)
+    _remove_dir(directory)
 
 
 # ---------------------------------------------------------------- pages
 
 
 def page_dir(project_id: str, page_id: str) -> Path:
-    return project_dir(project_id) / "pages" / page_id
+    return project_dir(project_id) / "pages" / _check_id(page_id)
 
 
 def create_page(project_id: str, name: str, bgr: np.ndarray, source_path: str | None) -> dict:
@@ -147,13 +181,11 @@ def save_page(project_id: str, page: dict) -> None:
 
 
 def delete_page(project_id: str, page_id: str) -> None:
-    import shutil
-
     project = load_project(project_id)
     directory = page_dir(project_id, page_id)
     if not directory.exists():
         raise HTTPException(404, f"page {page_id} not found")
-    shutil.rmtree(directory)
+    _remove_dir(directory)
     project["page_ids"] = [pid for pid in project["page_ids"] if pid != page_id]
     save_project(project)
 
@@ -192,7 +224,7 @@ def get_region(page: dict, region_id: str) -> dict:
 
 
 def mask_path(project_id: str, page_id: str, region_id: str) -> Path:
-    return page_dir(project_id, page_id) / "masks" / f"{region_id}.png"
+    return page_dir(project_id, page_id) / "masks" / f"{_check_id(region_id)}.png"
 
 
 def save_mask(project_id: str, page_id: str, region_id: str, mask: np.ndarray) -> None:
