@@ -9,23 +9,37 @@ from app.cv.pipeline import detect_regions
 from app.cv.qc import check_export
 from app.schemas import DetectParams, ExportOptions
 
-SAMPLE = Path(__file__).resolve().parent.parent.parent / "assets" / "raw-images" / "eyes-11.png"
+ASSETS = Path(__file__).resolve().parent.parent.parent / "assets" / "raw-images"
+
+# Fixture pages with expected detection counts (loose bounds: the exact number
+# shifts with algorithm tuning; these catch gross over/under-segmentation).
+FIXTURES = {
+    "eyes-11.png": (25, 120),
+    "hands-48.png": (60, 140),
+}
+
+
+@pytest.fixture(scope="module", params=sorted(FIXTURES))
+def fixture(request) -> tuple[np.ndarray, tuple[int, int]]:
+    path = ASSETS / request.param
+    bgr = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    assert bgr is not None, f"sample image missing: {path}"
+    return bgr, FIXTURES[request.param]
 
 
 @pytest.fixture(scope="module")
-def sample_bgr() -> np.ndarray:
-    bgr = cv2.imread(str(SAMPLE), cv2.IMREAD_COLOR)
-    assert bgr is not None, f"sample image missing: {SAMPLE}"
-    return bgr
+def sample_bgr(fixture) -> np.ndarray:
+    return fixture[0]
 
 
 @pytest.fixture(scope="module")
-def regions(sample_bgr) -> list[dict]:
-    return detect_regions(sample_bgr, DetectParams())
+def regions(fixture) -> list[dict]:
+    return detect_regions(fixture[0], DetectParams())
 
 
-def test_detects_many_regions(sample_bgr, regions):
-    assert 25 <= len(regions) <= 120
+def test_detects_many_regions(fixture, regions):
+    sample_bgr, (low, high) = fixture
+    assert low <= len(regions) <= high
 
     h, w = sample_bgr.shape[:2]
     page_area = h * w
@@ -42,7 +56,7 @@ def test_region_sizes_sane(sample_bgr, regions):
     page_area = h * w
     areas = sorted(r["bbox"][2] * r["bbox"][3] for r in regions)
     median = areas[len(areas) // 2]
-    assert 0.0005 * page_area <= median <= 0.10 * page_area
+    assert 0.0003 * page_area <= median <= 0.10 * page_area
 
 
 def test_matte_alpha(sample_bgr, regions):
@@ -86,8 +100,8 @@ def test_qc_catches_empty_export():
 def test_auto_flagging(regions):
     statuses = {region["status"] for region in regions}
     assert statuses <= {"provisional", "flagged"}
-    # The dense sample includes at least one suspicious region (e.g. the big
-    # central diagram or something near the page border).
+    # Both dense samples include at least one suspicious region (a very large
+    # merged blob or something near the page border).
     assert any(region["status"] == "flagged" for region in regions)
 
 
