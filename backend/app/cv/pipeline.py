@@ -23,10 +23,36 @@ class Blob:
 
 
 def normalize_illumination(gray: np.ndarray) -> np.ndarray:
-    """Divide out the paper background so tint/stains become uniform white."""
+    """Divide out the paper background so tint/stains become uniform white.
+
+    The morphological closing estimates local paper brightness, but inside a
+    solid ink area larger than the kernel it stays dark — that's ink, not
+    paper. Dividing by it would "normalize away" the interior of large solid
+    shapes (e.g. the middle of a filled palm). Substitute the page-wide paper
+    brightness there so big solid areas keep their darkness.
+    """
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (51, 51))
     background = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel)
-    return cv2.divide(gray, background, scale=255)
+    paper = _paper_brightness(gray)
+    background = np.where(background < paper * 0.7, np.uint8(min(255, round(paper))), background)
+    return cv2.divide(gray, background.astype(np.uint8), scale=255)
+
+
+def _paper_brightness(gray: np.ndarray) -> float:
+    """Brightness of the paper, robust even when ink dominates the image
+    (percentiles fail on a crop that is mostly one solid shape)."""
+    otsu, _ = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    bright = gray[gray >= otsu]
+    paper = float(bright.mean()) if bright.size else 255.0
+    # An implausibly dark "paper" means there is no paper in view (e.g. a
+    # crop entirely inside a solid shape) — treat everything as ink.
+    return paper if paper >= 100 else 255.0
+
+
+# Normalized pixels darker than this are ink no matter what the local
+# neighborhood looks like — adaptive thresholding alone misses the interior
+# of large uniform ink areas (its local mean IS the ink).
+DARK_CUT = 128
 
 
 def binarize(norm: np.ndarray, params: DetectParams) -> np.ndarray:
@@ -35,9 +61,11 @@ def binarize(norm: np.ndarray, params: DetectParams) -> np.ndarray:
         _, binary = cv2.threshold(norm, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
         return binary
     block_size = params.block_size | 1  # must be odd
-    return cv2.adaptiveThreshold(
+    binary = cv2.adaptiveThreshold(
         norm, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, block_size, params.c
     )
+    binary[norm < DARK_CUT] = 255
+    return binary
 
 
 def effective_merge_radius(params: DetectParams, width: int) -> int:

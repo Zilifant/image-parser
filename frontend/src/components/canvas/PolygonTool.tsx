@@ -8,6 +8,40 @@ export default function PolygonTool({ cursor }: { cursor: Point | null }) {
   const tool = useEditorStore((state) => state.tool)
   const scale = useEditorStore((state) => state.transform.scale)
   const draftPoints = useEditorStore((state) => state.draftPoints)
+  const brushSize = useEditorStore((state) => state.brushSize)
+  const brushMode = useEditorStore((state) => state.brushMode)
+
+  if (tool === 'brush') {
+    const color = brushMode === 'subtract' ? '#e06c75' : '#7bc96f'
+    return (
+      <>
+        {draftPoints.length > 0 ? (
+          <polyline
+            points={polygonToSvgPoints(draftPoints)}
+            fill="none"
+            stroke={color}
+            strokeOpacity={0.45}
+            strokeWidth={brushSize * 2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            pointerEvents="none"
+          />
+        ) : null}
+        {cursor ? (
+          <circle
+            cx={cursor[0]}
+            cy={cursor[1]}
+            r={brushSize}
+            fill={color}
+            fillOpacity={0.2}
+            stroke={color}
+            strokeWidth={1.5 / scale}
+            pointerEvents="none"
+          />
+        ) : null}
+      </>
+    )
+  }
 
   if (draftPoints.length === 0) return null
 

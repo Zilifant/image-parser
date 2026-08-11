@@ -13,15 +13,20 @@ const SOURCE_COLORS: Record<Region['source'], string> = {
 
 export default function RegionOverlay({
   regions,
+  width,
+  height,
   onPatchPolygon,
 }: {
   regions: Region[]
+  width: number
+  height: number
   onPatchPolygon: (regionId: string, polygon: Point[]) => void
 }) {
   const tool = useEditorStore((state) => state.tool)
   const scale = useEditorStore((state) => state.transform.scale)
   const selectedIds = useEditorStore((state) => state.selectedIds)
   const hoveredId = useEditorStore((state) => state.hoveredId)
+  const dimBackground = useEditorStore((state) => state.dimBackground)
   const setSelected = useEditorStore((state) => state.setSelected)
   const toggleSelected = useEditorStore((state) => state.toggleSelected)
   const setHovered = useEditorStore((state) => state.setHovered)
@@ -33,8 +38,22 @@ export default function RegionOverlay({
   const singleSelected = selectedIds.length === 1 ? selectedIds[0] : null
   const handleRadius = 5 / scale
 
+  // Dark veil over everything OUTSIDE detected regions (even-odd fill:
+  // the page rect plus each enabled polygon as subpaths).
+  const dimPath = dimBackground
+    ? `M0 0H${width}V${height}H0Z ` +
+      regions
+        .filter((region) => region.enabled)
+        .map((region) => {
+          const polygon = drag?.regionId === region.id ? drag.polygon : region.polygon
+          return `M${polygon.map(([x, y]) => `${x} ${y}`).join('L')}Z`
+        })
+        .join(' ')
+    : null
+
   return (
     <>
+      {dimPath ? <path d={dimPath} fillRule="evenodd" fill="#000" fillOpacity={0.6} pointerEvents="none" /> : null}
       {regions.map((region) => {
         const polygon = drag?.regionId === region.id ? drag.polygon : region.polygon
         const color = SOURCE_COLORS[region.source]
@@ -46,9 +65,21 @@ export default function RegionOverlay({
             key={region.id}
             points={polygonToSvgPoints(polygon)}
             fill={region.enabled ? (isFlagged ? '#e06c75' : color) : '#888888'}
-            fillOpacity={isSelected ? 0.28 : isHovered ? 0.22 : region.enabled ? 0.12 : 0.05}
+            fillOpacity={
+              dimBackground
+                ? isSelected || isHovered
+                  ? 0.15
+                  : 0
+                : isSelected
+                  ? 0.35
+                  : isHovered
+                    ? 0.3
+                    : region.enabled
+                      ? 0.2
+                      : 0.05
+            }
             stroke={isSelected ? '#ffb454' : isFlagged ? '#e06c75' : region.enabled ? color : '#888888'}
-            strokeWidth={isSelected ? 2.5 : 1.5}
+            strokeWidth={isSelected ? 3 : 2}
             strokeDasharray={isFlagged && !isSelected ? '6 3' : undefined}
             vectorEffect="non-scaling-stroke"
             style={{ pointerEvents: selectable ? 'auto' : 'none', cursor: 'pointer' }}

@@ -142,6 +142,52 @@ def test_malformed_ids_cannot_reach_the_filesystem(client, tmp_path):
     assert client.get(f"/api/projects/{project_id}/pages/{page_id}").status_code == 200
 
 
+def test_brush_and_bulk_enable(client):
+    project_id, page_id = _create_project_with_page(client)
+    base = f"/api/projects/{project_id}/pages/{page_id}"
+
+    # Brush with no target region creates a new one (with a stored mask).
+    response = client.post(
+        f"{base}/regions/brush",
+        json={"points": [[100, 100], [180, 100]], "radius": 20, "mode": "add"},
+    )
+    assert response.status_code == 200, response.text
+    region = response.json()
+    assert region["has_mask"] and region["source"] == "manual"
+    x, y, w, h = region["bbox"]
+    assert w > 100 and h >= 38  # stroke length + 2*radius
+
+    # Painting more with the region targeted expands it.
+    response = client.post(
+        f"{base}/regions/brush",
+        json={"region_id": region["id"], "points": [[180, 100], [180, 200]], "radius": 20, "mode": "add"},
+    )
+    assert response.status_code == 200
+    assert response.json()["bbox"][3] > h, "adding a downward stroke must grow the bbox"
+
+    # Subtracting carves the mask; erasing everything is refused.
+    response = client.post(
+        f"{base}/regions/brush",
+        json={"region_id": region["id"], "points": [[100, 100]], "radius": 10, "mode": "subtract"},
+    )
+    assert response.status_code == 200
+    response = client.post(
+        f"{base}/regions/brush",
+        json={"region_id": region["id"], "points": [[140, 150]], "radius": 200, "mode": "subtract"},
+    )
+    assert response.status_code == 409
+
+    # Bulk enable/disable.
+    client.post(f"{base}/detect", json={})
+    regions = client.post(f"{base}/regions/set-enabled", json={"enabled": False}).json()
+    assert all(not r["enabled"] for r in regions)
+    some_ids = [r["id"] for r in regions[:3]]
+    regions = client.post(
+        f"{base}/regions/set-enabled", json={"enabled": True, "region_ids": some_ids}
+    ).json()
+    assert sum(r["enabled"] for r in regions) == 3
+
+
 def test_delete_page_removes_it(client):
     project_id, page_id = _create_project_with_page(client)
     assert client.delete(f"/api/projects/{project_id}/pages/{page_id}").status_code == 200

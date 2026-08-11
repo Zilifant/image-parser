@@ -7,6 +7,7 @@ export interface CanvasPointerEvent {
   kind: 'down' | 'move' | 'up'
   point: Point
   shiftKey: boolean
+  altKey: boolean
   detail: number
   defaultPrevented: boolean
   preventDefault: () => void
@@ -105,6 +106,7 @@ export default function PageCanvas({
       kind,
       point: toImage(event.clientX, event.clientY),
       shiftKey: event.shiftKey,
+      altKey: event.altKey,
       detail: event.detail,
       defaultPrevented: event.defaultPrevented,
       preventDefault: () => {

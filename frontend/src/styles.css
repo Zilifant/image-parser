@@ -188,7 +188,7 @@ input[type='range'] {
 .editor {
   display: grid;
   grid-template-rows: auto 1fr;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: 1fr 320px;
   height: 100vh;
 }
 
@@ -205,6 +205,7 @@ input[type='range'] {
 
 .canvas-wrap.tool-polygon,
 .canvas-wrap.tool-lasso,
+.canvas-wrap.tool-brush,
 .canvas-wrap.tool-sam-point,
 .canvas-wrap.tool-sam-box {
   cursor: crosshair;
@@ -234,7 +235,7 @@ input[type='range'] {
 .sidebar {
   background: var(--panel);
   border-left: 1px solid var(--border);
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -242,6 +243,23 @@ input[type='range'] {
 .sidebar section {
   padding: 12px;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* The regions section fills the rest of the sidebar; only its list scrolls,
+   so the sections above it and its own header/controls stay put. */
+.sidebar section.regions-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar section.regions-section .region-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .sidebar h3 {
@@ -264,6 +282,16 @@ input[type='range'] {
 .field label {
   color: var(--text-dim);
   white-space: nowrap;
+}
+
+.field input[type='range'] {
+  flex: 1;
+  min-width: 40px;
+  width: auto;
+}
+
+.field select {
+  min-width: 0;
 }
 
 .field .value {
@@ -319,6 +347,8 @@ input[type='range'] {
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 10px;
+  max-height: 150px;
+  overflow-y: auto;
 }
 
 .export-strip img {
@@ -340,6 +370,23 @@ input[type='range'] {
 .hint {
   color: var(--text-dim);
   font-size: 12px;
+}
+
+.tip {
+  color: var(--text-dim);
+  cursor: help;
+  margin-left: 5px;
+  font-size: 12px;
+}
+
+.tip:hover {
+  color: var(--accent);
+}
+
+.brush-controls {
+  gap: 4px;
+  padding: 0 4px;
+  border-left: 1px solid var(--border);
 }
 
 .modal-backdrop {

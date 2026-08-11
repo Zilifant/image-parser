@@ -82,6 +82,20 @@ export const api = {
     }),
   deleteRegion: (projectId: string, pageId: string, regionId: string) =>
     request(`/projects/${projectId}/pages/${pageId}/regions/${regionId}`, { method: 'DELETE' }),
+  setEnabled: (projectId: string, pageId: string, enabled: boolean, regionIds?: string[]) =>
+    request<Region[]>(`/projects/${projectId}/pages/${pageId}/regions/set-enabled`, {
+      method: 'POST',
+      body: JSON.stringify({ enabled, region_ids: regionIds ?? null }),
+    }),
+  brush: (
+    projectId: string,
+    pageId: string,
+    body: { region_id?: string; points: Point[]; radius: number; mode: 'add' | 'subtract' },
+  ) =>
+    request<Region>(`/projects/${projectId}/pages/${pageId}/regions/brush`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   mergeRegions: (projectId: string, pageId: string, regionIds: string[]) =>
     request<Region>(`/projects/${projectId}/pages/${pageId}/regions/merge`, {
       method: 'POST',

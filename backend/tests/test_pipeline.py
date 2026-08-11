@@ -92,6 +92,23 @@ def test_clean_page(sample_bgr):
     assert (alpha < 16).mean() > 0.3, "plenty of transparent paper"
 
 
+def test_solid_interiors_stay_solid():
+    """Regression: illumination normalization must not hollow out the middle
+    of large solid shapes (e.g. a filled palm) — in detection or in export."""
+    img = np.full((500, 500, 3), 235, np.uint8)
+    cv2.rectangle(img, (150, 150), (350, 350), (20, 20, 20), -1)
+
+    regions = detect_regions(img, DetectParams())
+    assert len(regions) == 1
+
+    # Both an auto-detected region and a manual lasso must export solid.
+    for polygon in (regions[0]["polygon"], [[140, 140], [360, 140], [360, 360], [140, 360]]):
+        mask = rasterize_polygon(polygon, img.shape[:2])
+        rgba = export_region(img, (140, 140, 221, 221), mask, ExportOptions())
+        h, w = rgba.shape[:2]
+        assert rgba[h // 2, w // 2, 3] > 200, "center of a solid shape must be opaque"
+
+
 def test_qc_catches_empty_export():
     empty = np.zeros((64, 64, 4), np.uint8)
     assert "empty-foreground" in check_export(empty, ExportOptions())
